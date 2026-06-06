@@ -12,6 +12,7 @@
     "@fastify/cors": "^8.3.0",
     "@fastify/multipart": "^8.3.1",
     "@google-cloud/storage": "^7.7.0",
+    "@google/generative-ai": "^0.24.1",
     "bullmq": "^5.1.0",
     "dotenv": "^16.3.1",
     "fastify": "^4.24.3",
