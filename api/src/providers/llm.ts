@@ -1,47 +1,25 @@
-export interface CompletionOptions {
+export interface LLMMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface LLMResponse {
+  content: string;
+  model: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+  };
+}
+
+export interface LLMOptions {
   temperature?: number;
-  maxTokens?: number;
+  max_tokens?: number;
+  response_format?: {
+    type: 'json_object';
+  };
 }
 
 export interface LLMProvider {
-  complete(prompt: string, systemPrompt: string, options?: CompletionOptions): Promise<string>;
-}
-
-export class NotImplementedError extends Error {
-  constructor(providerName: string, method: string = 'complete') {
-    super(`Method '${method}' is not implemented for LLM Provider: ${providerName}`);
-    this.name = 'NotImplementedError';
-  }
-}
-
-export class GroqProvider implements LLMProvider {
-  private apiKey: string;
-
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
-  }
-
-  async complete(
-    prompt: string,
-    systemPrompt: string,
-    options?: CompletionOptions
-  ): Promise<string> {
-    throw new NotImplementedError('GroqProvider');
-  }
-}
-
-export class GeminiProvider implements LLMProvider {
-  private apiKey: string;
-
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
-  }
-
-  async complete(
-    prompt: string,
-    systemPrompt: string,
-    options?: CompletionOptions
-  ): Promise<string> {
-    throw new NotImplementedError('GeminiProvider');
-  }
+  complete(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse>;
 }

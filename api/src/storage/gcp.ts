@@ -1,39 +1,43 @@
 import { Storage } from '@google-cloud/storage';
 import { config } from '../config';
+import { StorageProvider } from './index';
 
-// Initialize the GCP Cloud Storage client.
-// It uses the GCP Project ID and key file path from the environment config.
-const storage = new Storage({
-  projectId: config.gcpProjectId,
-  keyFilename: config.googleApplicationCredentials,
-});
+export class GCSStorageProvider implements StorageProvider {
+  private storage: Storage | null = null;
 
-const bucket = storage.bucket(config.gcpBucketName);
+  private getStorageClient(): Storage {
+    if (!this.storage) {
+      this.storage = new Storage({
+        projectId: config.gcpProjectId,
+        keyFilename: config.googleApplicationCredentials,
+      });
+    }
+    return this.storage;
+  }
 
-/**
- * Uploads a policy PDF file to GCP Cloud Storage.
- * 
- * @param localFilePath The temporary local path where the file is stored
- * @param destinationName The name of the file in the bucket (e.g. policies/<policy_id>.pdf)
- * @returns The GCP Cloud Storage URI (gs://bucket/path)
- */
-export async function uploadPDF(
-  localFilePath: string,
-  destinationName: string
-): Promise<string> {
-  // Skeleton: print upload metadata and return virtual path
-  console.log(`[GCP Storage] Skeleton: Uploading ${localFilePath} to bucket ${config.gcpBucketName} as ${destinationName}`);
-  return `gs://${config.gcpBucketName}/${destinationName}`;
+  async save(file: Buffer, filename: string, mimeType: string): Promise<string> {
+    const storageClient = this.getStorageClient();
+    const bucket = storageClient.bucket(config.gcsBucketName);
+    const gcsFile = bucket.file(`uploads/${filename}`);
+    await gcsFile.save(file, {
+      metadata: {
+        contentType: mimeType,
+      },
+    });
+    return `uploads/${filename}`;
+  }
+
+  async delete(path: string): Promise<void> {
+    const storageClient = this.getStorageClient();
+    const bucket = storageClient.bucket(config.gcsBucketName);
+    const gcsFile = bucket.file(path);
+    try {
+      await gcsFile.delete();
+    } catch (err: any) {
+      if (err.code === 404 || err.status === 404 || err.message?.includes('Not Found')) {
+        return;
+      }
+      throw err;
+    }
+  }
 }
-
-/**
- * Deletes a policy PDF from GCP Cloud Storage (typically run by the TTL cleanup).
- * 
- * @param gcpPath The GCP Cloud Storage URI or object name to delete
- */
-export async function deletePDF(gcpPath: string): Promise<void> {
-  // Skeleton: print delete metadata
-  console.log(`[GCP Storage] Skeleton: Deleting object ${gcpPath} from bucket ${config.gcpBucketName}`);
-}
-
-export { storage, bucket };

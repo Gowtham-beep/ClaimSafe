@@ -1,15 +1,76 @@
 import { Worker, Job } from 'bullmq';
+import pino from 'pino';
 import { connection } from './client';
+import { query } from '../db/client';
+import { runPass0 } from '../pipeline/pass0';
+import { config } from '../config';
 
-// Initialize the BullMQ worker for the 'pipeline' queue
+const logger = pino({
+  level: config.nodeEnv === 'development' ? 'debug' : 'info',
+  transport:
+    config.nodeEnv === 'development'
+      ? {
+          target: 'pino-pretty',
+          options: {
+            colorize: true,
+            translateTime: 'HH:MM:ss Z',
+            ignore: 'pid,hostname',
+          },
+        }
+      : undefined,
+});
+
 export const worker = new Worker(
   'pipeline',
   async (job: Job) => {
-    // Boilerplate process function that logs job.id and returns
-    console.log(`[Queue Worker] Processing job ID: ${job.id}`);
+    const { jobId, policyId } = job.data as { jobId: string; policyId: string };
     
-    // No business logic yet - just return a simple state
-    return { status: 'processed_skeleton' };
+    // Generate requestId = jobId (use as correlation ID throughout)
+    const requestId = jobId;
+    const log = logger.child({ request_id: requestId, job_id: jobId, policy_id: policyId });
+    
+    log.info(`[Queue Worker] Processing job ID: ${jobId}`);
+
+    try {
+      // 1. Update status to "extracting"
+      await query(
+        'UPDATE pipeline_jobs SET status = $1, updated_at = NOW() WHERE job_id = $2',
+        ['extracting', jobId]
+      );
+      log.info('Job status updated to extracting');
+
+      // 2. Call runPass0
+      const pass0Result = await runPass0(jobId, policyId, requestId);
+
+      // 3. Update pipeline_jobs and policies on success
+      await query(
+        `UPDATE pipeline_jobs 
+         SET status = $1, pass0_at = NOW(), chunking_strategy = $2, updated_at = NOW() 
+         WHERE job_id = $3`,
+        ['pass0_complete', pass0Result.chunking_strategy, jobId]
+      );
+
+      await query(
+        'UPDATE policies SET policy_type = $1, insurer = $2 WHERE policy_id = $3',
+        [pass0Result.policy_type, pass0Result.insurer, policyId]
+      );
+
+      log.info({ pass0Result }, 'Pass 0 successfully complete and DB updated');
+      return { status: 'pass0_complete', pass0Result };
+    } catch (err: any) {
+      log.error({ err }, `Error processing job ${jobId}: ${err.message}`);
+      
+      // Update status to "failed" and record error
+      await query(
+        `UPDATE pipeline_jobs 
+         SET status = $1, failed_at = NOW(), error = $2, retry_count = retry_count + 1, updated_at = NOW() 
+         WHERE job_id = $3`,
+        ['failed', err.message || 'Unknown error', jobId]
+      );
+      
+      // Re-throw to trigger BullMQ retries
+      throw err;
+    }
   },
   {
     connection: connection as any,
@@ -17,9 +78,9 @@ export const worker = new Worker(
 );
 
 worker.on('completed', (job) => {
-  console.log(`[Queue Worker] Job ${job.id} completed successfully`);
+  logger.info(`[Queue Worker] Job ${job.id} completed successfully`);
 });
 
 worker.on('failed', (job, err) => {
-  console.error(`[Queue Worker] Job ${job?.id} failed with error:`, err);
+  logger.error(`[Queue Worker] Job ${job?.id} failed with error:`, err);
 });

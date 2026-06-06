@@ -34,6 +34,10 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   sessionSecret: process.env.SESSION_SECRET || 'changeme',
   pdfTtlHours: parseInt(process.env.PDF_TTL_HOURS || '48', 10),
+  storageDriver: process.env.STORAGE_DRIVER || 'local',
+  localStoragePath: process.env.LOCAL_STORAGE_PATH || './uploads',
+  gcsBucketName: process.env.GCS_BUCKET_NAME || '',
+  maxFileSizeMb: parseInt(process.env.MAX_FILE_SIZE_MB || '20', 10),
 } as const;
 
 export type Config = typeof config;
