@@ -129,7 +129,11 @@ export default function Home() {
             type="button"
             disabled={!selectedFile || isUploading}
             onClick={handleUpload}
-            className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition duration-150 hover:scale-[1.01] hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            className={`mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold shadow-sm transition duration-150 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+              selectedFile && !isUploading
+                ? 'cursor-pointer bg-blue-600 text-white hover:scale-[1.01] hover:bg-blue-700'
+                : 'cursor-not-allowed bg-slate-200 text-slate-400'
+            } ${isUploading ? 'bg-blue-600 text-white' : ''}`}
           >
             {isUploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {isUploading ? 'Uploading...' : 'Analyse My Policy'}

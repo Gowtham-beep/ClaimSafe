@@ -43,6 +43,10 @@
     background-size: 180% 180%;
   }
 
+  .bg-processing-gradient {
+    background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 50%, #eff6ff 100%);
+  }
+
   .scrollbar-stable {
     scrollbar-gutter: stable;
   }

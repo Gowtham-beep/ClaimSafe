@@ -154,8 +154,7 @@ export default function Results() {
                 {result.waiting_periods.map((item, index) => (
                   <article key={index} className="relative">
                     <span className="absolute -left-[25px] top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-600 shadow-sm" />
-                    <p className="text-sm font-semibold text-slate-900">{text(item, ['duration', 'period', 'title', 'condition'])}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-slate-600">{text(item, ['raw_text', 'condition', 'plain_english', 'detail'])}</p>
+                    <p className="text-sm leading-relaxed text-slate-700">{text(item, ['raw_text', 'condition', 'plain_english', 'detail'], '')}</p>
                   </article>
                 ))}
               </div>

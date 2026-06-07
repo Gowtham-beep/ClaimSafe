@@ -57,14 +57,14 @@ export default function Processing() {
   }, [jobId, navigate, routeState.policy_id]);
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50 px-4 py-6 animate-soft-gradient">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-processing-gradient px-4 py-6 animate-soft-gradient">
       <header className="absolute left-4 top-5 z-10 sm:left-8">
         <Link to="/" className="block rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2">
           <span className="text-lg font-bold tracking-tight text-slate-900">ClaimSafe</span>
         </Link>
       </header>
 
-      <section className="mx-auto flex w-full max-w-md flex-1 items-center justify-center py-24">
+      <section className="w-full max-w-md">
         <div className="animate-page-enter w-full rounded-xl border border-slate-200 bg-white p-7 shadow-sm">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Analysing your policy</h1>

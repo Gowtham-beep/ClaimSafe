@@ -8,10 +8,15 @@ type UploadResponse = {
 
 async function readError(response: Response, fallback: string) {
   try {
-    const body = await response.json();
+    const body = await response.clone().json();
     return typeof body?.error === 'string' ? body.error : fallback;
   } catch {
-    return fallback;
+    try {
+      const text = await response.text();
+      return text.trim() || `${fallback} (${response.status})`;
+    } catch {
+      return `${fallback} (${response.status})`;
+    }
   }
 }
 

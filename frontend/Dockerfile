@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
@@ -10,7 +10,11 @@ COPY . .
 
 RUN npm run build
 
-EXPOSE 5173
+FROM nginx:1.25-alpine
 
-# Serve the compiled app in Docker so Vite HMR does not trigger browser reloads behind Nginx.
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
