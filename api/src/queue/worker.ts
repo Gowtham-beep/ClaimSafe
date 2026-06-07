@@ -3,6 +3,7 @@ import pino from 'pino';
 import { connection } from './client';
 import { query } from '../db/client';
 import { runPass0 } from '../pipeline/pass0';
+import { runPass1 } from '../pipeline/pass1';
 import { config } from '../config';
 
 const logger = pino({
@@ -40,14 +41,14 @@ export const worker = new Worker(
       log.info('Job status updated to extracting');
 
       // 2. Call runPass0
-      const pass0Result = await runPass0(jobId, policyId, requestId);
+      const { result: pass0Result, chunks, chunking_strategy } = await runPass0(jobId, policyId, requestId);
 
-      // 3. Update pipeline_jobs and policies on success
+      // 3. Update pipeline_jobs and policies on Pass 0 success
       await query(
         `UPDATE pipeline_jobs 
          SET status = $1, pass0_at = NOW(), chunking_strategy = $2, updated_at = NOW() 
          WHERE job_id = $3`,
-        ['pass0_complete', pass0Result.chunking_strategy, jobId]
+        ['pass0_complete', chunking_strategy, jobId]
       );
 
       await query(
@@ -56,7 +57,20 @@ export const worker = new Worker(
       );
 
       log.info({ pass0Result }, 'Pass 0 successfully complete and DB updated');
-      return { status: 'pass0_complete', pass0Result };
+
+      // 4. Run Pass 1 (sequential structured extraction via Gemini)
+      await runPass1(jobId, policyId, requestId, pass0Result, chunks);
+
+      // 5. Update status to "pass1_complete" on success
+      await query(
+        `UPDATE pipeline_jobs 
+         SET status = $1, pass1_at = NOW(), updated_at = NOW() 
+         WHERE job_id = $2`,
+        ['pass1_complete', jobId]
+      );
+
+      log.info('Pass 1 successfully complete and DB updated');
+      return { status: 'pass1_complete' };
     } catch (err: any) {
       log.error({ err }, `Error processing job ${jobId}: ${err.message}`);
       

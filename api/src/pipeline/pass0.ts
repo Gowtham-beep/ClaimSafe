@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import pino from 'pino';
 import { query } from '../db/client';
-import { getLLMProvider, LLMMessage } from '../providers';
+import { getLLMProvider, getGeminiProvider, LLMMessage } from '../providers';
 import { config } from '../config';
 
 const logger = pino({
@@ -27,11 +27,25 @@ export interface Pass0Result {
   extraction_schema: Record<string, string[]>;
 }
 
+export interface ExtractChunk {
+  chunk_index: number;
+  section_ref: string | null;
+  page_start: number;
+  page_end: number;
+  text: string;
+}
+
+export interface Pass0Output {
+  result: Pass0Result;
+  chunks: ExtractChunk[];
+  chunking_strategy: string;
+}
+
 export async function runPass0(
   jobId: string,
   policyId: string,
   requestId: string
-): Promise<Pass0Result & { chunking_strategy: string }> {
+): Promise<Pass0Output> {
   const log = logger.child({ request_id: requestId, job_id: jobId, policy_id: policyId });
   log.info('Pass 0 start');
 
@@ -72,7 +86,7 @@ export async function runPass0(
 
     const extractData = (await response.json()) as {
       chunking_strategy: string;
-      chunks: Array<{ chunk_index: number; text: string }>;
+      chunks: ExtractChunk[];
     };
     log.info('pdf-service call complete');
 
@@ -115,14 +129,32 @@ ${concatenatedText}`;
       { role: 'user', content: userPrompt },
     ];
 
-    // 5. Call LLM Provider (Groq)
-    const llmRes = await getLLMProvider().complete(messages, {
-      response_format: { type: 'json_object' },
-    });
-    log.info('Groq call complete');
+    // 5. Call LLM Provider (Groq with fallback to Gemini)
+    let llmContent: string;
+    try {
+      const llmRes = await getLLMProvider().complete(messages, {
+        response_format: { type: 'json_object' },
+      });
+      log.info('Groq call complete');
+      llmContent = llmRes.content;
+    } catch (groqErr: any) {
+      log.warn({ err: groqErr }, 'Groq failed, falling back to Gemini for Pass 0');
+      const geminiRes = await getGeminiProvider().complete(messages, {
+        response_format: { type: 'json_object' },
+      });
+      log.info('Gemini fallback call complete');
+      llmContent = geminiRes.content;
+    }
 
     // 6. Parse and validate JSON
-    const parsed = JSON.parse(llmRes.content);
+    let content = llmContent.trim();
+    if (content.startsWith('```')) {
+      content = content
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/, '')
+        .replace(/\s*```$/, '');
+    }
+    const parsed = JSON.parse(content);
     log.info({ pass0_raw_result: parsed }, 'Pass 0 result');
 
     // 7. Validate response fields
@@ -148,10 +180,13 @@ ${concatenatedText}`;
     }
 
     return {
-      policy_type: parsed.policy_type as 'health' | 'term_life' | 'vehicle',
-      insurer: parsed.insurer,
-      detected_sections: parsed.detected_sections,
-      extraction_schema: schema,
+      result: {
+        policy_type: parsed.policy_type as 'health' | 'term_life' | 'vehicle',
+        insurer: parsed.insurer,
+        detected_sections: parsed.detected_sections,
+        extraction_schema: schema,
+      },
+      chunks: extractData.chunks,
       chunking_strategy: extractData.chunking_strategy,
     };
   } catch (error: any) {
