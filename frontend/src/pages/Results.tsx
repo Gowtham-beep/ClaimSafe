@@ -1,256 +1,249 @@
-import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { AnalysisResult } from '../types';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Lightbulb, RotateCcw } from 'lucide-react';
+import { getResult } from '../api/client';
+import CollapsibleSection from '../components/CollapsibleSection';
+import LoadingSkeleton from '../components/LoadingSkeleton';
+import PolicySummaryCard from '../components/PolicySummaryCard';
+import RiskFlagCard from '../components/RiskFlagCard';
+import type { AnalysisResult } from '../types';
+
+type SectionKey = 'exclusions' | 'waiting' | 'sublimits' | 'copayments' | 'coverage' | 'tips';
+
+const emptyText = 'None identified in this policy.';
+
+function text(item: unknown, keys: string[], fallback = '—') {
+  if (typeof item === 'string') return item;
+  if (!item || typeof item !== 'object') return fallback;
+
+  for (const key of keys) {
+    const value = (item as Record<string, unknown>)[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number') return String(value);
+  }
+
+  return fallback;
+}
+
+function EmptyState() {
+  return <p className="p-4 text-sm italic text-slate-400">{emptyText}</p>;
+}
+
+function RawBox({ value }: { value: string }) {
+  return <pre className="whitespace-pre-wrap break-words rounded-lg bg-slate-100 p-3 font-mono text-xs leading-relaxed text-slate-600">{value}</pre>;
+}
 
 export default function Results() {
-  const { policyId } = useParams<{ policyId: string }>();
-
-  // Mock analysis result for a typical Indian health insurance policy
-  const mockResult: AnalysisResult = {
-    policy_id: policyId || 'mock-id-123',
-    insurer: 'Star Health Insurance',
-    policy_type: 'health',
-    sum_insured: '₹5,00,000',
-    premium: '₹12,450 / year',
-    policy_period: '1 Year (2026 - 2027)',
-    risk_flags: [
-      {
-        title: "Room Rent Cap limits all expenses",
-        plain_english: "Your room rent is capped at 1% of the sum insured (₹5,000/day). If you choose a room costing ₹8,000/day, you won't just pay the ₹3,000 difference. The insurer will reduce all other hospital expenses (doctors, ICU, medicines) by 37.5% proportionally.",
-        severity: "high",
-        severity_reason: "Capped room rent triggers proportionate deductions across the entire bill, causing massive out-of-pocket expenses."
-      },
-      {
-        title: "Hidden Cataract waiting period",
-        plain_english: "You cannot claim for Cataract surgery during the first 24 months of this policy. Any surgery done for cataracts before 2 years will be rejected in full.",
-        severity: "medium",
-        severity_reason: "2-year waiting period applies specifically to cataract surgery, common in Indian policies."
-      },
-      {
-        title: "Modern Treatments are sub-limited",
-        plain_english: "Treatments like Robotic Surgery or Stem Cell therapy are capped at 50% of sum insured (₹2,50,000), even if you have higher coverage.",
-        severity: "low",
-        severity_reason: "Applies only to advanced specialized procedures; standard hospitalizations are unaffected."
-      }
-    ],
-    exclusions: [
-      { id: 1, title: "Adventure Sports injuries", detail: "Injuries sustained while paragliding, scuba diving, etc." },
-      { id: 2, title: "Cosmetic or Aesthetic surgery", detail: "Treatments purely for appearance enhancement." }
-    ],
-    waiting_periods: [
-      { duration: "30 Days", condition: "Initial waiting period (except accidents)" },
-      { duration: "24 Months", condition: "Specific illnesses (hernia, cataracts, joint replacement)" },
-      { duration: "36 Months", condition: "Pre-existing diseases declared at proposal" }
-    ],
-    sublimits: [
-      { limit: "₹20,000", item: "Cataract surgery per eye limit" },
-      { limit: "1% of Sum Insured", item: "Normal Room Rent per day" },
-      { limit: "2% of Sum Insured", item: "ICU Charges per day" }
-    ],
-    copayments: [
-      { percentage: "20%", condition: "Applies to zone-based treatments (outside home city)" },
-      { percentage: "10%", condition: "Co-pay for senior citizens entering above age 60" }
-    ],
-    coverage_summary: "Comprehensive health insurance plan providing standard inpatient hospitalization cover, day care procedures, and pre/post-hospitalization expenses. Subject to room rent caps and specified disease waiting periods.",
-    claim_tips: [
-      "File pre-authorization at least 48 hours before planned admissions.",
-      "Ask the hospital TPA cell to specify room category as 'Single Standard AC' to avoid room rent penalties.",
-      "Collect all original pharmacy bills, discharge summary, and diagnostic logs for reimbursement."
-    ]
-  };
-
-  // State to manage collapsible sections
-  const [collapsed, setCollapsed] = useState({
-    exclusions: true,
-    waitingPeriods: true,
-    sublimits: true,
-    copayments: true,
-    tips: true
+  const { policyId = '' } = useParams();
+  const navigate = useNavigate();
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>({
+    exclusions: false,
+    waiting: false,
+    sublimits: false,
+    copayments: false,
+    coverage: false,
+    tips: false,
   });
 
-  const toggleSection = (section: keyof typeof collapsed) => {
-    setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadResult() {
+      try {
+        const data = await getResult(policyId);
+        if (mounted) setResult(data);
+      } catch (err) {
+        if (mounted) setError(err instanceof Error ? err.message : 'Unable to load analysis result.');
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+
+    loadResult();
+    return () => {
+      mounted = false;
+    };
+  }, [policyId]);
+
+  const toggle = (key: SectionKey) => {
+    setOpen((current) => ({ ...current, [key]: !current[key] }));
   };
 
-  const getSeverityBadgeColor = (severity: string) => {
-    switch (severity) {
-      case 'high': return 'bg-rose-500/10 border-rose-500/30 text-rose-400';
-      case 'medium': return 'bg-amber-500/10 border-amber-500/30 text-amber-400';
-      default: return 'bg-sky-500/10 border-sky-500/30 text-sky-400';
-    }
-  };
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <Header />
+        <LoadingSkeleton />
+      </main>
+    );
+  }
+
+  if (error || !result) {
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <Header />
+        <section className="mx-auto max-w-xl px-4 py-20">
+          <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
+            <h1 className="text-xl font-semibold tracking-tight text-slate-900">Could not load results</h1>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">{error || 'No result was returned for this policy.'}</p>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="mt-5 inline-flex h-10 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition duration-150 hover:scale-[1.01] hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              Analyse another policy
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8 pb-20">
-      
-      {/* Back button and metadata header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-6">
-        <div>
-          <Link to="/" className="text-indigo-400 text-sm hover:underline inline-flex items-center gap-1 mb-2">
-            ← Analyze another policy
-          </Link>
-          <h2 className="text-3xl font-extrabold text-white">{mockResult.insurer}</h2>
-          <p className="text-slate-400 text-sm capitalize">Policy Type: {mockResult.policy_type.replace('_', ' ')}</p>
-        </div>
-        
-        {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 gap-4 bg-slate-800/30 border border-slate-800/80 rounded-xl p-4 sm:min-w-[280px]">
-          <div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Sum Insured</div>
-            <div className="text-lg font-bold text-white">{mockResult.sum_insured}</div>
+    <main className="min-h-screen bg-slate-50">
+      <Header />
+
+      <div className="mx-auto max-w-3xl space-y-7 px-4 py-10 animate-page-enter">
+        <PolicySummaryCard result={result} />
+
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold tracking-tight text-slate-900">⚠ Risk Flags</h2>
+            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-900 px-2 text-xs font-semibold text-white">
+              {result.risk_flags.length}
+            </span>
           </div>
-          <div>
-            <div className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Premium</div>
-            <div className="text-lg font-bold text-emerald-400">{mockResult.premium}</div>
-          </div>
-        </div>
-      </div>
+          {result.risk_flags.length > 0 ? (
+            <div className="space-y-4">
+              {result.risk_flags.map((flag, index) => (
+                <RiskFlagCard key={`${flag.title}-${index}`} flag={flag} index={index} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+              <EmptyState />
+            </div>
+          )}
+        </section>
 
-      {/* Critical Risks - Displayed first (Progressive Disclosure) */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <span>⚠️</span> Critical Claim Risks & Warnings
-        </h3>
-        
-        <div className="space-y-4">
-          {mockResult.risk_flags.map((flag, idx) => (
-            <div 
-              key={idx} 
-              className="bg-slate-800/40 border border-slate-700/40 backdrop-blur-xl rounded-xl p-6 space-y-3 relative overflow-hidden"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <h4 className="text-base font-bold text-white">{flag.title}</h4>
-                <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${getSeverityBadgeColor(flag.severity)}`}>
-                  {flag.severity}
-                </span>
+        <div className="space-y-3">
+          <CollapsibleSection title="Exclusions" count={result.exclusions.length} open={open.exclusions} onToggle={() => toggle('exclusions')}>
+            {result.exclusions.length ? (
+              <div className="space-y-5">
+                {result.exclusions.map((item, index) => (
+                  <article key={index} className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-900">{text(item, ['title', 'name', 'condition'])}</h3>
+                    <RawBox value={text(item, ['raw_text', 'detail', 'clause', 'text'])} />
+                    <p className="text-sm leading-relaxed text-slate-700">{text(item, ['plain_english', 'summary', 'explanation'])}</p>
+                    <p className="text-xs italic text-slate-500">{text(item, ['impact', 'severity_reason', 'reason'], '')}</p>
+                  </article>
+                ))}
               </div>
-              <p className="text-sm text-slate-300 font-light leading-relaxed">
-                {flag.plain_english}
-              </p>
-              <div className="bg-slate-900/40 rounded-lg p-3 text-xs text-slate-400 border border-slate-800/60">
-                <span className="font-semibold text-slate-300">Why it matters: </span>
-                {flag.severity_reason}
+            ) : (
+              <EmptyState />
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Waiting Periods" count={result.waiting_periods.length} open={open.waiting} onToggle={() => toggle('waiting')}>
+            {result.waiting_periods.length ? (
+              <div className="space-y-5 border-l border-slate-200 pl-5">
+                {result.waiting_periods.map((item, index) => (
+                  <article key={index} className="relative">
+                    <span className="absolute -left-[25px] top-1 h-3 w-3 rounded-full border-2 border-white bg-blue-600 shadow-sm" />
+                    <p className="text-sm font-semibold text-slate-900">{text(item, ['duration', 'period', 'title', 'condition'])}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-600">{text(item, ['raw_text', 'condition', 'plain_english', 'detail'])}</p>
+                  </article>
+                ))}
               </div>
-            </div>
-          ))}
+            ) : (
+              <EmptyState />
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Sub-limits & Caps" count={result.sublimits.length} open={open.sublimits} onToggle={() => toggle('sublimits')}>
+            {result.sublimits.length ? (
+              <LimitList items={result.sublimits} />
+            ) : (
+              <EmptyState />
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Co-payment & Deductibles" count={result.copayments.length} open={open.copayments} onToggle={() => toggle('copayments')}>
+            {result.copayments.length ? (
+              <LimitList items={result.copayments} />
+            ) : (
+              <EmptyState />
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="What's Actually Covered" count={result.coverage_summary ? 1 : 0} open={open.coverage} onToggle={() => toggle('coverage')}>
+            {result.coverage_summary ? (
+              <p className="text-sm leading-relaxed text-slate-700">{result.coverage_summary}</p>
+            ) : (
+              <EmptyState />
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="Claim Tips" count={result.claim_tips.length} open={open.tips} onToggle={() => toggle('tips')}>
+            {result.claim_tips.length ? (
+              <div className="space-y-3">
+                {result.claim_tips.map((item, index) => (
+                  <article key={index} className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{text(item, ['tip', 'title', 'text'])}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-slate-500">{text(item, ['reason', 'why', 'detail'], '')}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <EmptyState />
+            )}
+          </CollapsibleSection>
         </div>
       </div>
+    </main>
+  );
+}
 
-      {/* Collapsible details sections */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-white mb-2">Policy Details</h3>
-
-        {/* Exclusions */}
-        <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-800/20">
-          <button 
-            onClick={() => toggleSection('exclusions')}
-            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-          >
-            <span className="text-sm font-semibold text-slate-200">🚫 Exclusions ({mockResult.exclusions.length})</span>
-            <span className="text-slate-400">{collapsed.exclusions ? '＋' : '－'}</span>
-          </button>
-          {!collapsed.exclusions && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-800/50 space-y-3">
-              {mockResult.exclusions.map((item, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="text-sm font-medium text-slate-200">{item.title}</div>
-                  <div className="text-xs text-slate-400">{item.detail}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Waiting Periods */}
-        <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-800/20">
-          <button 
-            onClick={() => toggleSection('waitingPeriods')}
-            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-          >
-            <span className="text-sm font-semibold text-slate-200">⏳ Waiting Periods ({mockResult.waiting_periods.length})</span>
-            <span className="text-slate-400">{collapsed.waitingPeriods ? '＋' : '－'}</span>
-          </button>
-          {!collapsed.waitingPeriods && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-800/50 space-y-4">
-              {mockResult.waiting_periods.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-start gap-4">
-                  <div className="text-xs text-slate-400">{item.condition}</div>
-                  <div className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">{item.duration}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Sub-limits */}
-        <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-800/20">
-          <button 
-            onClick={() => toggleSection('sublimits')}
-            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-          >
-            <span className="text-sm font-semibold text-slate-200">📊 Room Rent & Sub-limits ({mockResult.sublimits.length})</span>
-            <span className="text-slate-400">{collapsed.sublimits ? '＋' : '－'}</span>
-          </button>
-          {!collapsed.sublimits && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-800/50 space-y-4">
-              {mockResult.sublimits.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center gap-4">
-                  <div className="text-xs text-slate-400">{item.item}</div>
-                  <div className="text-xs font-semibold text-slate-200">{item.limit}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Co-payments */}
-        <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-800/20">
-          <button 
-            onClick={() => toggleSection('copayments')}
-            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-          >
-            <span className="text-sm font-semibold text-slate-200">🤝 Co-payments ({mockResult.copayments.length})</span>
-            <span className="text-slate-400">{collapsed.copayments ? '＋' : '－'}</span>
-          </button>
-          {!collapsed.copayments && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-800/50 space-y-4">
-              {mockResult.copayments.map((item, idx) => (
-                <div key={idx} className="flex justify-between items-center gap-4">
-                  <div className="text-xs text-slate-400">{item.condition}</div>
-                  <div className="text-xs font-semibold text-slate-200 bg-slate-800 px-2 py-0.5 rounded">{item.percentage}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Claim Tips */}
-        <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-800/20">
-          <button 
-            onClick={() => toggleSection('tips')}
-            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-          >
-            <span className="text-sm font-semibold text-slate-200">💡 Claim Assistance & Tips</span>
-            <span className="text-slate-400">{collapsed.tips ? '＋' : '－'}</span>
-          </button>
-          {!collapsed.tips && (
-            <div className="px-6 pb-6 pt-2 border-t border-slate-800/50 space-y-3">
-              {mockResult.claim_tips.map((tip, idx) => (
-                <div key={idx} className="flex gap-2 text-xs text-slate-300 font-light leading-relaxed">
-                  <span className="text-indigo-400 select-none">•</span>
-                  <span>{tip}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+function Header() {
+  return (
+    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-4 px-4">
+        <Link to="/" className="text-lg font-bold tracking-tight text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2">
+          ClaimSafe
+        </Link>
+        <Link
+          to="/"
+          className="inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition duration-150 hover:scale-[1.01] hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
+        >
+          Analyse another policy
+        </Link>
       </div>
-      
-      {/* 48-hour delete warning info */}
-      <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 text-center text-xs text-slate-500 leading-relaxed max-w-lg mx-auto">
-        🕒 For your privacy, the uploaded PDF document will be permanently deleted from our servers 48 hours after upload. Your analysis report will remain accessible under this session.
-      </div>
+    </header>
+  );
+}
 
+function LimitList({ items }: { items: unknown[] }) {
+  return (
+    <div className="space-y-5">
+      {items.map((item, index) => (
+        <article key={index} className="space-y-3">
+          <h3 className="text-sm font-semibold text-slate-900">{text(item, ['title', 'item', 'condition', 'limit'])}</h3>
+          <RawBox value={text(item, ['raw_text', 'detail', 'clause', 'condition'])} />
+          <p className="text-sm leading-relaxed text-slate-700">{text(item, ['plain_english', 'summary', 'explanation'])}</p>
+          {text(item, ['example'], '') ? (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm leading-relaxed text-blue-900">
+              {text(item, ['example'])}
+            </div>
+          ) : null}
+        </article>
+      ))}
     </div>
   );
 }

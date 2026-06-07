@@ -35,4 +35,6 @@ export interface AnalysisResult {
 export interface JobStatusResponse {
   job_id: string;
   status: JobStatus;
+  policy_id?: string;
+  error?: string | null;
 }

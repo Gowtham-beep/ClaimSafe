@@ -1,124 +1,152 @@
-import React, { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, FileUp, Loader2 } from 'lucide-react';
+import { uploadPolicy } from '../api/client';
+
+const maxFileSize = 20 * 1024 * 1024;
+
+function formatBytes(bytes: number) {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function Home() {
   const navigate = useNavigate();
-  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
+  const selectFile = (file?: File) => {
+    setError('');
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setSelectedFile(null);
+      setError('Please select a PDF policy document.');
+      return;
     }
+    if (file.size > maxFileSize) {
+      setSelectedFile(null);
+      setError('File size must be 20MB or less.');
+      return;
+    }
+    setSelectedFile(file);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      // Simulate file upload and navigate to mock job
-      const mockJobId = "job_" + Math.random().toString(36).substr(2, 9);
-      navigate(`/processing/${mockJobId}`);
-    }
-  };
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    setError('');
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const mockJobId = "job_" + Math.random().toString(36).substr(2, 9);
-      navigate(`/processing/${mockJobId}`);
+    try {
+      const response = await uploadPolicy(selectedFile);
+      navigate(`/processing/${response.job_id}`, {
+        state: {
+          policy_id: response.policy_id,
+          session_id: response.session_id,
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      {/* Hero Header Section */}
-      <div className="text-center mb-16 space-y-4">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-2">
-          🇮🇳 For Indian Insurance Policies
-        </div>
-        <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-400 bg-clip-text text-transparent">
-          ClaimSafe
-        </h1>
-        <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
-          Upload your insurance policy PDF and get a plain-English risk breakdown. Know your exclusions, waiting periods, and sub-limits before you claim.
-        </p>
-      </div>
+    <main className="relative flex min-h-screen flex-col bg-slate-50 px-4 py-6">
+      <header className="absolute left-4 top-5 sm:left-8">
+        <a href="/" className="block rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2">
+          <span className="text-lg font-bold tracking-tight text-slate-900">ClaimSafe</span>
+          <span className="block text-sm text-slate-500">Know what your policy actually covers.</span>
+        </a>
+      </header>
 
-      {/* Main Upload Box */}
-      <div 
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
-        className={`relative group rounded-2xl border border-dashed p-12 text-center transition-all duration-300 backdrop-blur-xl ${
-          dragActive 
-            ? 'border-indigo-500 bg-indigo-950/20 shadow-[0_0_50px_rgba(79,70,229,0.15)]Scale-98' 
-            : 'border-slate-700 bg-slate-800/40 hover:border-slate-600 hover:bg-slate-800/60'
-        }`}
-      >
-        <input 
-          type="file" 
-          id="file-upload" 
-          accept=".pdf"
-          className="hidden" 
-          onChange={handleFileChange}
-        />
-        <label htmlFor="file-upload" className="cursor-pointer block space-y-6">
-          {/* Animated upload icon */}
-          <div className="mx-auto w-16 h-16 rounded-xl bg-slate-800 flex items-center justify-center border border-slate-700 group-hover:scale-110 group-hover:border-indigo-500/50 transition-all duration-300 shadow-inner">
-            <svg className="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-          </div>
-          
-          <div className="space-y-2">
-            <h3 className="text-xl font-semibold text-white">Drag & drop your policy PDF</h3>
-            <p className="text-sm text-slate-400">or <span className="text-indigo-400 group-hover:underline">browse files</span> from your computer</p>
-          </div>
-
-          <div className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed border-t border-slate-800/60 pt-6">
-            Supports Health, Term Life, and Vehicle Insurance policies from all major Indian insurers (LIC, Star Health, HDFC Ergo, etc.)
-          </div>
-        </label>
-      </div>
-
-      {/* Trust / Privacy Pillars */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16 text-center">
-        <div className="p-6 rounded-2xl bg-slate-800/20 border border-slate-800/50 backdrop-blur-sm">
-          <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
-          </div>
-          <h4 className="text-base font-semibold text-white mb-1">Strictly Confidential</h4>
-          <p className="text-xs text-slate-400">Your policy PDF is automatically deleted from our servers after 48 hours.</p>
+      <section className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center pb-16 pt-24">
+        <div className="animate-page-enter text-center">
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">Upload your policy. Understand your risk.</h1>
+          <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-slate-500">
+            We analyse your insurance policy and surface every clause that could cause a claim rejection or financial surprise. Plain English. No sales pitch.
+          </p>
         </div>
 
-        <div className="p-6 rounded-2xl bg-slate-800/20 border border-slate-800/50 backdrop-blur-sm">
-          <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+        <div className="mt-8 animate-card-in rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              selectFile(event.dataTransfer.files[0]);
+            }}
+            className={`rounded-lg border border-dashed p-10 text-center transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+              isDragging ? 'border-blue-600 bg-blue-50' : 'border-slate-300 bg-white hover:border-blue-600 hover:bg-slate-50'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="sr-only"
+              onChange={(event) => selectFile(event.target.files?.[0])}
+            />
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              {selectedFile ? <CheckCircle2 className="h-7 w-7 text-emerald-600" aria-hidden="true" /> : <FileUp className="h-7 w-7" aria-hidden="true" />}
+            </div>
+            {selectedFile ? (
+              <div className="mt-5">
+                <p className="break-words text-sm font-semibold text-slate-900">{selectedFile.name}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatBytes(selectedFile.size)}</p>
+              </div>
+            ) : (
+              <div className="mt-5">
+                <p className="text-sm font-semibold text-slate-900">Drop your policy PDF here</p>
+                <p className="mt-1 text-sm text-slate-500">or click to browse — max 20MB</p>
+              </div>
+            )}
           </div>
-          <h4 className="text-base font-semibold text-white mb-1">No Sales Motive</h4>
-          <p className="text-xs text-slate-400">We don't sell policies, take commissions, or recommend other plans. Just unbiased risk analysis.</p>
+
+          <button
+            type="button"
+            disabled={!selectedFile || isUploading}
+            onClick={handleUpload}
+            className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition duration-150 hover:scale-[1.01] hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          >
+            {isUploading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
+            {isUploading ? 'Uploading...' : 'Analyse My Policy'}
+          </button>
+          {error ? <p className="mt-3 text-sm font-medium text-red-600">{error}</p> : null}
         </div>
 
-        <div className="p-6 rounded-2xl bg-slate-800/20 border border-slate-800/50 backdrop-blur-sm">
-          <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <h4 className="text-base font-semibold text-white mb-1">Instant Results</h4>
-          <p className="text-xs text-slate-400">Our 3-pass LLM pipeline extracts, validates, and reports risk clauses within 60 seconds.</p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-center text-xs text-slate-500">
+          <span>🔒 PDF deleted after 48 hours</span>
+          <span>📋 No account required</span>
+          <span>⚡ Results in ~2 minutes</span>
         </div>
-      </div>
-    </div>
+      </section>
+
+      <footer className="absolute bottom-6 left-0 right-0 px-4 text-center text-xs text-slate-400">
+        Built by Gowtham N · github.com/gowtham-n
+      </footer>
+    </main>
   );
 }
