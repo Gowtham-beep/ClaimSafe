@@ -30,8 +30,10 @@ export class GeminiProvider implements LLMProvider {
           };
         });
 
-      const modelName = 'gemini-2.5-flash';
-      const generativeModel = this.genAI.getGenerativeModel({
+      const modelCandidates = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest'];
+      let candidateIdx = 0;
+      let modelName = modelCandidates[candidateIdx];
+      let generativeModel = this.genAI.getGenerativeModel({
         model: modelName,
         systemInstruction,
       });
@@ -57,7 +59,34 @@ export class GeminiProvider implements LLMProvider {
           });
 
           const response = result.response;
-          const content = response.text() || '';
+          let content = response.text() || '';
+
+          if (options?.response_format?.type === 'json_object') {
+            const trimmed = content.trim();
+            const firstBrace = trimmed.indexOf('{');
+            const firstBracket = trimmed.indexOf('[');
+            let startIdx = -1;
+            let endIdx = -1;
+
+            if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+              startIdx = firstBrace;
+              endIdx = trimmed.lastIndexOf('}');
+            } else if (firstBracket !== -1) {
+              startIdx = firstBracket;
+              endIdx = trimmed.lastIndexOf(']');
+            }
+
+            if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+              content = trimmed.substring(startIdx, endIdx + 1);
+            } else if (trimmed.startsWith('```')) {
+              content = trimmed
+                .replace(/^```json\s*/i, '')
+                .replace(/^```\s*/, '')
+                .replace(/\s*```$/, '')
+                .trim();
+            }
+          }
+
           const inputTokens = response.usageMetadata?.promptTokenCount || 0;
           const outputTokens = response.usageMetadata?.candidatesTokenCount || 0;
 
@@ -73,14 +102,43 @@ export class GeminiProvider implements LLMProvider {
           lastErr = err;
           const errString = err.message || String(err);
           const is503 = err.status === 503 || errString.includes('503') || errString.includes('Service Unavailable');
-          
+          const is429 = err.status === 429 || errString.includes('429') || errString.includes('Quota exceeded') || errString.includes('Too Many Requests');
+          const is404 = err.status === 404 || errString.includes('404') || errString.includes('not found') || errString.includes('not supported');
+
+          if ((is429 || is404) && candidateIdx < modelCandidates.length - 1) {
+            candidateIdx++;
+            const prevModel = modelName;
+            modelName = modelCandidates[candidateIdx];
+            console.warn(`[GeminiProvider] Model ${prevModel} failed with ${is429 ? '429 Quota' : '404 Unsupported'}. Falling back to candidate: ${modelName}...`);
+            generativeModel = this.genAI.getGenerativeModel({
+              model: modelName,
+              systemInstruction,
+            });
+            attempt = 0;
+            continue;
+          }
+
           if (is503 && attempt < maxRetries) {
             attempt++;
             const backoffMs = Math.pow(2, attempt) * 1000;
-            console.warn(`[GeminiProvider] 503/Service Unavailable. Retrying attempt ${attempt}/${maxRetries} in ${backoffMs}ms...`);
+            console.warn(`[GeminiProvider] 503/Service Unavailable for ${modelName}. Retrying attempt ${attempt}/${maxRetries} in ${backoffMs}ms...`);
             await new Promise((resolve) => setTimeout(resolve, backoffMs));
             continue;
           }
+
+          if (is503 && candidateIdx < modelCandidates.length - 1) {
+            candidateIdx++;
+            const prevModel = modelName;
+            modelName = modelCandidates[candidateIdx];
+            console.warn(`[GeminiProvider] 503 persisted for ${prevModel}. Falling back to candidate: ${modelName}...`);
+            generativeModel = this.genAI.getGenerativeModel({
+              model: modelName,
+              systemInstruction,
+            });
+            attempt = 0;
+            continue;
+          }
+
           throw err;
         }
       }
