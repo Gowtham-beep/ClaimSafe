@@ -102,6 +102,7 @@ ${chunk.text}`;
       // Call Gemini
       const geminiRes = await gemini.complete(messages, {
         response_format: { type: 'json_object' },
+        temperature: 0,
       });
 
       // Parse JSON array

@@ -134,6 +134,7 @@ ${concatenatedText}`;
     try {
       const llmRes = await getLLMProvider().complete(messages, {
         response_format: { type: 'json_object' },
+        temperature: 0,
       });
       log.info('Groq call complete');
       llmContent = llmRes.content;
@@ -141,6 +142,7 @@ ${concatenatedText}`;
       log.warn({ err: groqErr }, 'Groq failed, falling back to Gemini for Pass 0');
       const geminiRes = await getGeminiProvider().complete(messages, {
         response_format: { type: 'json_object' },
+        temperature: 0,
       });
       log.info('Gemini fallback call complete');
       llmContent = geminiRes.content;

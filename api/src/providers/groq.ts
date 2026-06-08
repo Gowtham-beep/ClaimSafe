@@ -27,7 +27,7 @@ export class GroqProvider implements LLMProvider {
           role: m.role,
           content: m.content,
         })),
-        temperature: options?.temperature,
+        temperature: options?.temperature ?? 0,
         max_tokens: options?.max_tokens,
         response_format: options?.response_format,
       });

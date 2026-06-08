@@ -228,7 +228,8 @@ export async function runPass2(
       ];
 
       const resA = await groq.complete(messagesA, {
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
+        temperature: 0,
       });
       parsedA = parseJSONContent(resA.content);
       log.info({ token_estimate: tokenEstimateA }, 'Sub-call A complete');
@@ -303,7 +304,8 @@ export async function runPass2(
       ];
 
       const resB = await groq.complete(messagesB, {
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
+        temperature: 0,
       });
       parsedB = parseJSONContent(resB.content);
       log.info({ token_estimate: tokenEstimateB }, 'Sub-call B complete');
@@ -362,7 +364,8 @@ export async function runPass2(
       ];
 
       const resC = await groq.complete(messagesC, {
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
+        temperature: 0,
       });
       parsedC = parseJSONContent(resC.content);
       log.info({ token_estimate: tokenEstimateC }, 'Sub-call C complete');
