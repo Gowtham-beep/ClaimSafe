@@ -1,0 +1,21 @@
+app = "claimsafe-api"
+primary_region = "bom"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  release_command = "node dist/db/migrate.js"
+
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+  PDF_SERVICE_URL = "http://claimsafe-pdf.internal:8000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
