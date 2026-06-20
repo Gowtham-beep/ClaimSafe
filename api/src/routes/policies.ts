@@ -2,7 +2,6 @@ import { FastifyPluginAsync } from 'fastify';
 import cookie from '@fastify/cookie';
 import { v4 as uuidv4 } from 'uuid';
 import { query, pool } from '../db/client';
-import { getStorage } from '../storage';
 
 const policiesRoutes: FastifyPluginAsync = async (fastify, options) => {
   // Register cookie plugin locally
@@ -65,9 +64,9 @@ const policiesRoutes: FastifyPluginAsync = async (fastify, options) => {
     request.log.info({ request_id: requestId, policy_id }, 'DELETE /policies/:policy_id request received');
 
     try {
-      // 1. Fetch raw_pdf_path and session_id
+      // 1. Fetch session_id
       const res = await query(
-        'SELECT raw_pdf_path, session_id FROM policies WHERE policy_id = $1',
+        'SELECT session_id FROM policies WHERE policy_id = $1',
         [policy_id]
       );
 
@@ -107,16 +106,7 @@ const policiesRoutes: FastifyPluginAsync = async (fastify, options) => {
         client.release();
       }
 
-      // 4. Delete PDF from storage
-      if (policy.raw_pdf_path) {
-        try {
-          const storage = getStorage();
-          await storage.delete(policy.raw_pdf_path);
-          request.log.info({ request_id: requestId, path: policy.raw_pdf_path }, 'Storage delete complete');
-        } catch (storageErr: any) {
-          request.log.error({ request_id: requestId, path: policy.raw_pdf_path, err: storageErr.message || storageErr }, 'Storage delete failed but ignored to prevent blocking');
-        }
-      }
+
 
       return reply.status(200).send({ message: 'Policy deleted' });
     } catch (err: any) {

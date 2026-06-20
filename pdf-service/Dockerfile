@@ -15,5 +15,6 @@ COPY . .
 
 EXPOSE 8000
 
-# Start FastAPI server using uvicorn with hot-reload enabled for dev mode
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Start FastAPI server using python main.py
+CMD ["python", "main.py"]
+

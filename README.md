@@ -6,6 +6,16 @@ Upload your Indian insurance policy PDF. Get a plain-language breakdown of every
 
 ---
 
+## Privacy Architecture: In-Memory Only
+
+ClaimSafe employs a strict "no-persistence" architecture for all uploaded PDF documents. To ensure maximum data privacy:
+- The PDF is **never** saved to disk or cloud object storage.
+- The document is processed entirely in memory.
+- Once text and metadata are extracted synchronously, the buffer is immediately discarded.
+- Only the extracted, structured data is queued and analyzed.
+
+---
+
 ## 1. Services Overview
 
 | Service | Technology | Port | Purpose |
@@ -26,7 +36,6 @@ Upload your Indian insurance policy PDF. Get a plain-language breakdown of every
 
 *   Docker and Docker Compose installed.
 *   A `.env` file created from `.env.example` with real credentials/configurations.
-*   GCP service account key at `api/gcp-key.json` (for Cloud Storage — can be skipped in development).
 
 ---
 
@@ -211,7 +220,6 @@ docker compose exec postgres psql -U claimsafe -d claimsafe -c "\d policies"
  premium       | text                     |           |          | 
  policy_period | text                     |           |          | 
  renewal_date  | text                     |           |          | 
- raw_pdf_path  | text                     |           |          | 
  created_at    | timestamp with time zone |           |          | now()
 Indexes:
     "policies_pkey" PRIMARY KEY, btree (policy_id)

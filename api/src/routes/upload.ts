@@ -2,7 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import multipart from '@fastify/multipart';
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../db/client';
-import { getStorage } from '../storage';
+
 import { enqueuePipelineJob } from '../queue/producer';
 import { config } from '../config';
 
@@ -64,7 +64,36 @@ const uploadRoutes: FastifyPluginAsync = async (fastify, options) => {
       return reply.status(413).send({ error: `File size exceeds the limit of ${config.maxFileSizeMb}MB` });
     }
 
-    request.log.info({ request_id: requestId }, 'Validation passed');
+    request.log.info({ request_id: requestId }, 'Validation passed, sending to pdf-service for extraction');
+
+    // Send PDF to pdf-service POST /extract
+    const formData = new FormData();
+    const pdfBlob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' });
+    formData.append('file', pdfBlob, 'upload.pdf');
+    formData.append('request_id', requestId);
+
+    let extractData;
+    try {
+      const pdfServiceUrl = `${config.pdfServiceUrl}/extract`;
+      const response = await fetch(pdfServiceUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => 'No detail');
+        throw new Error(`pdf-service extract failed with status ${response.status}: ${errText}`);
+      }
+
+      extractData = (await response.json()) as {
+        chunking_strategy: string;
+        chunks: any[];
+      };
+      request.log.info({ request_id: requestId }, 'pdf-service extraction complete');
+    } catch (err: any) {
+      request.log.error({ request_id: requestId, err }, 'Failed to extract text from PDF via pdf-service');
+      return reply.status(500).send({ error: 'Failed to process PDF content' });
+    }
 
     const sessionId = uuidv4();
     const policyId = uuidv4();
@@ -80,10 +109,10 @@ const uploadRoutes: FastifyPluginAsync = async (fastify, options) => {
         [sessionId]
       );
 
-      // 2. Insert policy (temporarily with null path)
+      // 2. Insert policy (no path)
       await client.query(
-        'INSERT INTO policies (policy_id, session_id, raw_pdf_path) VALUES ($1, $2, $3)',
-        [policyId, sessionId, null]
+        'INSERT INTO policies (policy_id, session_id) VALUES ($1, $2)',
+        [policyId, sessionId]
       );
 
       // 3. Insert pipeline_job
@@ -92,33 +121,20 @@ const uploadRoutes: FastifyPluginAsync = async (fastify, options) => {
         [jobId, policyId, 'uploaded']
       );
 
-      // 4. Save PDF
-      const storage = getStorage();
-      const filename = `${policyId}.pdf`;
-      const storagePath = await storage.save(buffer, filename, 'application/pdf');
-      
-      request.log.info({ request_id: requestId, policy_id: policyId, job_id: jobId }, 'Storage save complete');
-
-      // 5. UPDATE policies
-      await client.query(
-        'UPDATE policies SET raw_pdf_path = $1 WHERE policy_id = $2',
-        [storagePath, policyId]
-      );
-
       await client.query('COMMIT');
       
-      request.log.info({ request_id: requestId, policy_id: policyId, job_id: jobId }, 'DB transaction committed and inserts complete');
+      request.log.info({ request_id: requestId, policy_id: policyId, job_id: jobId }, 'DB transaction committed');
     } catch (transactionError: any) {
       await client.query('ROLLBACK');
       request.log.error({ request_id: requestId, policy_id: policyId, job_id: jobId, err: transactionError }, 'Database transaction failed, rolling back');
-      return reply.status(500).send({ error: 'Internal server error during upload database storage' });
+      return reply.status(500).send({ error: 'Internal server error during database inserts' });
     } finally {
       client.release();
     }
 
-    // 6. Enqueue pipeline job (outside transaction, failure does not roll back)
+    // 4. Enqueue pipeline job with chunks
     try {
-      await enqueuePipelineJob(jobId, policyId);
+      await enqueuePipelineJob(jobId, policyId, extractData.chunks, extractData.chunking_strategy);
       request.log.info({ request_id: requestId, policy_id: policyId, job_id: jobId }, 'Pipeline job enqueued');
     } catch (enqueueError: any) {
       request.log.error({ request_id: requestId, policy_id: policyId, job_id: jobId, err: enqueueError }, 'Failed to enqueue pipeline job');

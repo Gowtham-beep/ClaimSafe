@@ -14,13 +14,17 @@ const pipelineQueue = new Queue('pipeline', {
  */
 export async function enqueuePipelineJob(
   jobId: string,
-  policyId: string
+  policyId: string,
+  chunks: any[],
+  chunkingStrategy: string
 ): Promise<void> {
   await pipelineQueue.add(
     'process-policy',
     {
       jobId,
       policyId,
+      chunks,
+      chunkingStrategy,
     },
     {
       jobId, // Match the BullMQ job ID with our database pipeline job ID

@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS policies (
   premium       TEXT,
   policy_period TEXT,
   renewal_date  TEXT,
-  raw_pdf_path  TEXT,  -- GCP Cloud Storage path
   created_at    TIMESTAMPTZ DEFAULT now()
 );
 

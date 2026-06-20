@@ -41,6 +41,12 @@ async function main() {
     await server.register(resultRoutes, { prefix: '/api' });
     await server.register(policiesRoutes, { prefix: '/api' });
 
+    // Health check route for Fly.io liveness check
+    server.get('/health', async (request, reply) => {
+      return { status: 'ok' };
+    });
+
+
     // Start server
     await server.listen({ port: config.port, host: '0.0.0.0' });
   } catch (err) {

@@ -44,54 +44,16 @@ export interface Pass0Output {
 export async function runPass0(
   jobId: string,
   policyId: string,
-  requestId: string
+  requestId: string,
+  chunks: ExtractChunk[],
+  chunkingStrategy: string
 ): Promise<Pass0Output> {
   const log = logger.child({ request_id: requestId, job_id: jobId, policy_id: policyId });
   log.info('Pass 0 start');
 
   try {
-    // 1. Fetch raw_pdf_path from policies table
-    const policyRes = await query(
-      'SELECT raw_pdf_path FROM policies WHERE policy_id = $1',
-      [policyId]
-    );
-    const rawPdfPath = policyRes.rows[0]?.raw_pdf_path;
-    if (!rawPdfPath) {
-      throw new Error(`No raw_pdf_path found for policy_id: ${policyId}`);
-    }
-
-    // 2. Read the PDF file from storage
-    const physicalPath = path.join(config.localStoragePath, path.basename(rawPdfPath));
-    if (!fs.existsSync(physicalPath)) {
-      throw new Error(`PDF file not found at local storage path: ${physicalPath}`);
-    }
-    const pdfBuffer = await fs.promises.readFile(physicalPath);
-
-    // 3. Send PDF to pdf-service POST /extract
-    const formData = new FormData();
-    const pdfBlob = new Blob([pdfBuffer], { type: 'application/pdf' });
-    formData.append('file', pdfBlob, path.basename(rawPdfPath));
-    formData.append('request_id', requestId);
-
-    const pdfServiceUrl = `${config.pdfServiceUrl}/extract`;
-    const response = await fetch(pdfServiceUrl, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => 'No detail');
-      throw new Error(`pdf-service extract failed with status ${response.status}: ${errText}`);
-    }
-
-    const extractData = (await response.json()) as {
-      chunking_strategy: string;
-      chunks: ExtractChunk[];
-    };
-    log.info('pdf-service call complete');
-
     // Only use the first 3 chunks for classification
-    const first3Chunks = extractData.chunks.slice(0, 3);
+    const first3Chunks = chunks.slice(0, 3);
     const concatenatedText = first3Chunks.map((c) => c.text).join('\n');
 
     // 4. Build classification prompt
@@ -188,8 +150,8 @@ ${concatenatedText}`;
         detected_sections: parsed.detected_sections,
         extraction_schema: schema,
       },
-      chunks: extractData.chunks,
-      chunking_strategy: extractData.chunking_strategy,
+      chunks: chunks,
+      chunking_strategy: chunkingStrategy,
     };
   } catch (error: any) {
     log.error({ err: error }, `Pass 0 failed: ${error.message}`);

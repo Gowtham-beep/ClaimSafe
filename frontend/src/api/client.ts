@@ -20,11 +20,13 @@ async function readError(response: Response, fallback: string) {
   }
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export async function uploadPolicy(file: File): Promise<UploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch('/api/upload', {
+  const response = await fetch(`${API_BASE}/api/upload`, {
     method: 'POST',
     body: formData,
   });
@@ -37,7 +39,7 @@ export async function uploadPolicy(file: File): Promise<UploadResponse> {
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
-  const response = await fetch(`/api/status/${encodeURIComponent(jobId)}`);
+  const response = await fetch(`${API_BASE}/api/status/${encodeURIComponent(jobId)}`);
 
   if (!response.ok) {
     throw new Error(await readError(response, 'Unable to check processing status.'));
@@ -47,7 +49,7 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
 }
 
 export async function getResult(policyId: string): Promise<AnalysisResult> {
-  const response = await fetch(`/api/result/${encodeURIComponent(policyId)}`);
+  const response = await fetch(`${API_BASE}/api/result/${encodeURIComponent(policyId)}`);
 
   if (response.status === 202) {
     throw new Error('Analysis is not complete yet.');
@@ -59,3 +61,4 @@ export async function getResult(policyId: string): Promise<AnalysisResult> {
 
   return response.json();
 }
+

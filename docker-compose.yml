@@ -37,12 +37,15 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      - PORT=8000
 
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
     container_name: claimsafe-api
+    command: npm run dev
     restart: always
     depends_on:
       postgres:

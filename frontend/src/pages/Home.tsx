@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, FileUp, Loader2 } from 'lucide-react';
 import { uploadPolicy } from '../api/client';
 
-const maxFileSize = 20 * 1024 * 1024;
+const maxFileSize = 8 * 1024 * 1024;
 
 function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -27,7 +27,7 @@ export default function Home() {
     }
     if (file.size > maxFileSize) {
       setSelectedFile(null);
-      setError('File size must be 20MB or less.');
+      setError('File size must be 8MB or less.');
       return;
     }
     setSelectedFile(file);
@@ -120,7 +120,7 @@ export default function Home() {
             ) : (
               <div className="mt-5">
                 <p className="text-sm font-semibold text-slate-900">Drop your policy PDF here</p>
-                <p className="mt-1 text-sm text-slate-500">or click to browse — max 20MB</p>
+                <p className="mt-1 text-sm text-slate-500">or click to browse — max 8MB</p>
               </div>
             )}
           </div>
@@ -142,7 +142,7 @@ export default function Home() {
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-center text-xs text-slate-500">
-          <span>🔒 PDF deleted after 48 hours</span>
+          <span>🔒 100% Private. Your PDF is never stored.</span>
           <span>📋 No account required</span>
           <span>⚡ Results in ~2 minutes</span>
         </div>

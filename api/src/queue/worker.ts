@@ -25,7 +25,7 @@ const logger = pino({
 export const worker = new Worker(
   'pipeline',
   async (job: Job) => {
-    const { jobId, policyId } = job.data as { jobId: string; policyId: string };
+    const { jobId, policyId, chunks: jobChunks, chunkingStrategy: jobChunkingStrategy } = job.data as { jobId: string; policyId: string; chunks: any[]; chunkingStrategy: string };
     
     // Generate requestId = jobId (use as correlation ID throughout)
     const requestId = jobId;
@@ -43,11 +43,11 @@ export const worker = new Worker(
 
       // 2. Call runPass0
       let pass0Result: any;
-      let chunks: any[] = [];
-      let chunking_strategy = 'section_aware';
+      let chunks = jobChunks || [];
+      let chunking_strategy = jobChunkingStrategy || 'section_aware';
       
       try {
-        const pass0Output = await runPass0(jobId, policyId, requestId);
+        const pass0Output = await runPass0(jobId, policyId, requestId, chunks, chunking_strategy);
         pass0Result = pass0Output.result;
         chunks = pass0Output.chunks;
         chunking_strategy = pass0Output.chunking_strategy;
